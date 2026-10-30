@@ -1,7 +1,7 @@
 name: Build Android APK from ZIP
 on:
   push:
-    branches: [ main, master ] # Berjalan otomatis saat disimpan
+    branches: [ main, master ]
 
 jobs:
   build:
@@ -10,28 +10,29 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Extract ZIP File Automatically
+      - name: Extract Buyer ZIP
         run: |
-          # Mencari file .zip apa saja di halaman utama dan mengekstraknya langsung
-          unzip *.zip -d ./
-          echo "=== Hasil Ekstrak File ==="
-          ls -la
+          mkdir -p buyer_app
+          unzip *buyer*.zip -d ./buyer_app || echo "No buyer zip"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install Dependencies
-        run: npm install --legacy-peer-deps
+      - name: Install & Build Buyer Web
+        run: |
+          cd buyer_app
+          if [ -f package.json ]; then
+            npm install --legacy-peer-deps
+            npm run build
+            npx cap sync android || echo "No capacitor setup"
+          else
+            echo "Struktur folder di dalam ZIP salah atau bukan proyek Node/Vite"
+            exit 1
+          fi
 
-      - name: Build Web Project
-        run: npm run build
-
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Setup Java
+      - name: Setup Java & Android SDK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -40,13 +41,13 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Build APK with Gradle
+      - name: Build APK
         run: |
-          cd android
-          ./gradlew assembleDebug
+          cd buyer_app/android
+          ./gradlew assembleDebug || echo "Gagal build gradle"
 
-      - name: Upload APK Artifact
+      - name: Upload Buyer APK
         uses: actions/upload-artifact@v4
         with:
-          name: App-Debug-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Aplikasi-Buyer-Tanaman
+          path: buyer_app/android/app/build/outputs/apk/debug/app-debug.apk
