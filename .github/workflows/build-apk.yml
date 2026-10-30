@@ -10,29 +10,43 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Extract Buyer ZIP
+      - name: Extract ZIP File Automatically
         run: |
+          mkdir -p extracted_zip
+          unzip *buyer*.zip -d ./extracted_zip
+          
+          # Trik pintar: Cek apakah ada folder di dalam folder, jika ya, keluarkan isinya
           mkdir -p buyer_app
-          unzip *buyer*.zip -d ./buyer_app || echo "No buyer zip"
+          if [ -f extracted_zip/package.json ]; then
+            cp -r extracted_zip/* buyer_app/
+          else
+            cp -r extracted_zip/*/* buyer_app/ || cp -r extracted_zip/* buyer_app/
+          fi
+          
+          echo "=== Struktur Folder buyer_app ==="
+          ls -la buyer_app
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install & Build Buyer Web
+      - name: Install Dependencies
         run: |
           cd buyer_app
-          if [ -f package.json ]; then
-            npm install --legacy-peer-deps
-            npm run build
-            npx cap sync android || echo "No capacitor setup"
-          else
-            echo "Struktur folder di dalam ZIP salah atau bukan proyek Node/Vite"
-            exit 1
-          fi
+          npm install --legacy-peer-deps
 
-      - name: Setup Java & Android SDK
+      - name: Build Web Project
+        run: |
+          cd buyer_app
+          npm run build
+
+      - name: Sync Capacitor
+        run: |
+          cd buyer_app
+          npx cap sync android || echo "Tidak ada konfigurasi Capacitor"
+
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -41,13 +55,21 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Build APK
+      - name: Build APK with Gradle
         run: |
-          cd buyer_app/android
-          ./gradlew assembleDebug || echo "Gagal build gradle"
+          # Mencari folder android di mana pun berada dan menjalankan gradle build
+          ANDROID_DIR=$(find . -type d -name "android" | head -n 1)
+          if [ -n "$ANDROID_DIR" ]; then
+            cd "$ANDROID_DIR"
+            chmod +x gradlew
+            ./gradlew assembleDebug
+          else
+            echo "Folder 'android' (Capacitor) tidak ditemukan di dalam file ZIP Anda!"
+            exit 1
+          fi
 
       - name: Upload Buyer APK
         uses: actions/upload-artifact@v4
         with:
           name: Aplikasi-Buyer-Tanaman
-          path: buyer_app/android/app/build/outputs/apk/debug/app-debug.apk
+          path: "**/app/build/outputs/apk/debug/app-debug.apk"
